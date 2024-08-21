@@ -1,15 +1,19 @@
 #ifndef GPT2_BPE_TOKENIZER_H_
 #define GPT2_BPE_TOKENIZER_H_
-
 #include <torch/script.h>
+#include <torchtext/csrc/export.h>
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
 
 namespace torchtext {
+
+// set to store tokens that are not to be split
+static std::set<std::string> bpe_never_split_set_;
 
 typedef std::tuple<
     std::unordered_map<std::string, int64_t>,
@@ -54,8 +58,12 @@ struct GPT2BPEEncoder : torch::CustomClassHolder {
  private:
   const int64_t inf_;
   // Encode byte into an unicode character.
-  std::vector<std::string> ByteEncode_(std::string token);
+  std::vector<std::string> ByteEncode_(
+      std::string token,
+      bool is_never_split_token);
   int64_t GetBPEMergeRank_(std::string pair);
+  c10::Dict<std::string, int64_t> added_tokens_encoder_;
+  c10::Dict<int64_t, std::string> added_tokens_decoder_;
 
  protected:
   c10::Dict<std::string, std::vector<std::string>> cache_;
@@ -68,8 +76,10 @@ struct GPT2BPEEncoder : torch::CustomClassHolder {
 
  public:
   const c10::Dict<std::string, int64_t> bpe_encoder_;
+  const c10::Dict<int64_t, std::string> bpe_decoder_;
   const c10::Dict<std::string, int64_t> bpe_merge_ranks_;
   const c10::Dict<int64_t, std::string> byte_encoder_;
+  const c10::Dict<std::string, int64_t> byte_decoder_;
   const std::string seperator_;
   const bool caching_enabled_;
   explicit GPT2BPEEncoder(
@@ -79,7 +89,7 @@ struct GPT2BPEEncoder : torch::CustomClassHolder {
       const c10::Dict<int64_t, std::string>& byte_encoder,
       bool caching_enabled = false);
 
-  explicit GPT2BPEEncoder(
+  TORCHTEXT_API explicit GPT2BPEEncoder(
       const std::unordered_map<std::string, int64_t>& bpe_encoder,
       const std::unordered_map<std::string, int64_t>& bpe_merge_ranks,
       const std::string& seperator,
@@ -97,20 +107,25 @@ struct GPT2BPEEncoder : torch::CustomClassHolder {
   //  --> bpe encode --> bpe token ids: [707, 5927], [11], [707, 68]
   //  --> result --> [707, 5927, 11, 707, 68]
   //
-  std::vector<int64_t> Encode(const std::string& text);
-  std::vector<std::string> Tokenize(const std::string& text);
+  TORCHTEXT_API std::vector<int64_t> Encode(const std::string& text);
+  TORCHTEXT_API std::string Decode(const std::vector<int64_t>& tokens);
+  TORCHTEXT_API std::vector<std::string> Tokenize(const std::string& text);
+  TORCHTEXT_API int64_t AddSpecialTokens(
+      const c10::Dict<std::string, std::string>& standard_special_tokens_dict,
+      const std::vector<std::string>& additional_special_tokens);
 
-  std::unordered_map<std::string, int64_t> GetBPEEncoder() const;
-  std::unordered_map<std::string, int64_t> GetBPEMergeRanks() const;
-  std::unordered_map<int64_t, std::string> GetByteEncoder() const;
+  TORCHTEXT_API std::unordered_map<std::string, int64_t> GetBPEEncoder() const;
+  TORCHTEXT_API std::unordered_map<std::string, int64_t> GetBPEMergeRanks()
+      const;
+  TORCHTEXT_API std::unordered_map<int64_t, std::string> GetByteEncoder() const;
 };
 
-GPT2BPEEncoderStatesPybind _serialize_gpt2_bpe_encoder_pybind(
+TORCHTEXT_API GPT2BPEEncoderStatesPybind _serialize_gpt2_bpe_encoder_pybind(
     const c10::intrusive_ptr<GPT2BPEEncoder>& self);
 GPT2BPEEncoderStatesTorchbind _serialize_gpt2_bpe_encoder_torchbind(
     const c10::intrusive_ptr<GPT2BPEEncoder>& self);
-c10::intrusive_ptr<GPT2BPEEncoder> _deserialize_gpt2_bpe_encoder_pybind(
-    GPT2BPEEncoderStatesPybind states);
+TORCHTEXT_API c10::intrusive_ptr<GPT2BPEEncoder>
+_deserialize_gpt2_bpe_encoder_pybind(GPT2BPEEncoderStatesPybind states);
 c10::intrusive_ptr<GPT2BPEEncoder> _deserialize_gpt2_bpe_encoder_torchbind(
     GPT2BPEEncoderStatesTorchbind states);
 } // namespace torchtext

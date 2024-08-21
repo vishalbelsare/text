@@ -1,3 +1,5 @@
+.. image:: docs/source/_static/img/torchtext_logo.png
+
 .. image:: https://circleci.com/gh/pytorch/text.svg?style=svg
     :target: https://circleci.com/gh/pytorch/text
 
@@ -10,11 +12,13 @@
 torchtext
 +++++++++
 
+**WARNING**: TorchText development is stopped and the `0.18` release (April 2024) will be the last stable release of the library.
+
 This repository consists of:
 
 * `torchtext.datasets <https://github.com/pytorch/text/tree/main/torchtext/datasets>`_: The raw text iterators for common NLP datasets
 * `torchtext.data <https://github.com/pytorch/text/tree/main/torchtext/data>`_: Some basic NLP building blocks
-* `torchtext.transforms <https://github.com/pytorch/text/tree/main/torchtext/transforms>`_: Basic text-processing transformations
+* `torchtext.transforms <https://github.com/pytorch/text/tree/main/torchtext/transforms.py>`_: Basic text-processing transformations
 * `torchtext.models <https://github.com/pytorch/text/tree/main/torchtext/models>`_: Pre-trained models
 * `torchtext.vocab <https://github.com/pytorch/text/tree/main/torchtext/vocab>`_: Vocab and Vectors related classes and factory functions
 * `examples <https://github.com/pytorch/text/tree/main/examples>`_: Example NLP workflows with PyTorch and torchtext library.
@@ -29,12 +33,17 @@ We recommend Anaconda as a Python package management system. Please refer to `py
    :header: "PyTorch version", "torchtext version", "Supported Python version"
    :widths: 10, 10, 10
 
-   nightly build, main, ">=3.7, <=3.9"
+   nightly build, main, ">=3.8, <=3.11"
+   2.3.0, 0.18.0, ">=3.8, <=3.11"
+   2.2.0, 0.17.0, ">=3.8, <=3.11"
+   2.1.0, 0.16.0, ">=3.8, <=3.11"
+   2.0.0, 0.15.0, ">=3.8, <=3.11"
+   1.13.0, 0.14.0, ">=3.7, <=3.10"
+   1.12.0, 0.13.0, ">=3.7, <=3.10"
    1.11.0, 0.12.0, ">=3.6, <=3.9"
    1.10.0, 0.11.0, ">=3.6, <=3.9"
    1.9.1, 0.10.1, ">=3.6, <=3.9"
    1.9, 0.10, ">=3.6, <=3.9"
-   1.8.2 (LTS), 0.9.2 (LTS), ">=3.6, <=3.9"
    1.8.1, 0.9.1, ">=3.6, <=3.9"
    1.8, 0.9, ">=3.6, <=3.9"
    1.7.1, 0.8.1, ">=3.6, <=3.9"
@@ -51,9 +60,6 @@ Using conda::
 Using pip::
 
     pip install torchtext
-
-**Note** LTS versions are distributed through a different channel than the other versioned releases.
-Please refer to https://pytorch.org/get-started/locally/ for details.
 
 Optional requirements
 ---------------------
@@ -93,6 +99,9 @@ To build torchtext from source, you need ``git``, ``CMake`` and C++11 compiler s
 When building from source, make sure that you have the same C++ compiler as the one used to build PyTorch. A simple way is to build PyTorch from source and use the same environment to build torchtext.
 If you are using the nightly build of PyTorch, checkout the environment it was built with `conda (here) <https://github.com/pytorch/builder/tree/main/conda>`_ and `pip (here) <https://github.com/pytorch/builder/tree/main/manywheel>`_.
 
+Additionally, datasets in torchtext are implemented using the torchdata library. Please take a look at the
+`installation instructions <https://github.com/pytorch/data#installation>`_ to download the latest nightlies or install from source.
+
 Documentation
 =============
 
@@ -116,7 +125,10 @@ Models
 The library currently consist of following pre-trained models:
 
 * RoBERTa: `Base and Large Architecture <https://github.com/pytorch/fairseq/tree/main/examples/roberta#pre-trained-models>`_
+* `DistilRoBERTa <https://github.com/huggingface/transformers/blob/main/examples/research_projects/distillation/README.md>`_
 * XLM-RoBERTa: `Base and Large Architure <https://github.com/pytorch/fairseq/tree/main/examples/xlmr#pre-trained-models>`_
+* T5: `Small, Base, Large, 3B, and 11B Architecture <https://github.com/google-research/text-to-text-transfer-transformer>`_
+* Flan-T5: `Base, Large, XL, and XXL Architecture <https://github.com/google-research/t5x>`_
 
 Tokenizers
 ==========
@@ -126,6 +138,8 @@ The transforms module currently support following scriptable tokenizers:
 * `SentencePiece <https://github.com/google/sentencepiece>`_
 * `GPT-2 BPE <https://github.com/openai/gpt-2/blob/master/src/encoder.py>`_
 * `CLIP <https://github.com/openai/CLIP/blob/main/clip/simple_tokenizer.py>`_
+* `RE2 <https://github.com/google/re2>`_
+* `BERT <https://arxiv.org/pdf/1810.04805.pdf>`_
 
 Tutorials
 =========

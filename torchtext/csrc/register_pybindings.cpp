@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <torch/csrc/jit/python/module_python.h> // @manual
+#include <torch/csrc/jit/python/utf8_decoding_ignore.h>
 #include <torch/csrc/utils/pybind.h> // @manual
 #include <torch/script.h>
 #include <torchtext/csrc/bert_tokenizer.h> // @manual
@@ -179,6 +180,27 @@ PYBIND11_MODULE(_torchtext, m) {
       .def_property_readonly("byte_encoder_", &GPT2BPEEncoder::GetByteEncoder)
       .def("encode", &GPT2BPEEncoder::Encode)
       .def("tokenize", &GPT2BPEEncoder::Tokenize)
+      .def(
+          "decode",
+          [](const c10::intrusive_ptr<GPT2BPEEncoder>& self,
+             const std::vector<int64_t>& tokens) {
+            std::string s = self->Decode(tokens);
+            PyObject* py_obj =
+                PyUnicode_DecodeUTF8(s.data(), s.length(), "ignore");
+            py::str py_s = py::reinterpret_steal<py::str>(py_obj);
+            return py_s;
+          })
+      .def(
+          "add_special_tokens",
+          [](const c10::intrusive_ptr<GPT2BPEEncoder>& self,
+             const std::unordered_map<std::string, std::string>& items,
+             const std::vector<std::string>& additional) {
+            c10::Dict<std::string, std::string> d;
+            for (const auto& item : items) {
+              d.insert(item.first, item.second);
+            }
+            return (self->AddSpecialTokens(d, additional));
+          })
       .def(py::pickle(
           // __getstate__
           [](const c10::intrusive_ptr<GPT2BPEEncoder>& self)
@@ -217,7 +239,11 @@ PYBIND11_MODULE(_torchtext, m) {
           }));
 
   py::class_<BERTEncoder, c10::intrusive_ptr<BERTEncoder>>(m, "BERTEncoder")
-      .def(py::init<const std::string, bool, c10::optional<bool>>())
+      .def(py::init<
+           const std::string,
+           bool,
+           c10::optional<bool>,
+           std::vector<std::string>>())
       .def("encode", &BERTEncoder::Encode)
       .def("tokenize", &BERTEncoder::Tokenize)
       .def(
@@ -262,6 +288,9 @@ PYBIND11_MODULE(_torchtext, m) {
   m.def(
       "_build_vocab_from_text_file_using_python_tokenizer",
       &_build_vocab_from_text_file_using_python_tokenizer);
+  m.def(
+      "torchtext::set_utf8_decoding_ignore",
+      &torch::jit::setUTF8DecodingIgnore);
 }
 
 } // namespace torchtext

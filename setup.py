@@ -4,10 +4,11 @@ import io
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
-from build_tools import setup_helpers
 from setuptools import find_packages, setup
+from tools import setup_helpers
 
 ROOT_DIR = Path(__file__).parent.resolve()
 
@@ -44,6 +45,18 @@ def _export_version(version, sha):
         fileobj.write("git_version = {}\n".format(repr(sha)))
 
 
+def _init_submodule():
+    print(" --- Initializing submodules")
+    try:
+        subprocess.check_call(["git", "submodule", "init"])
+        subprocess.check_call(["git", "submodule", "update"])
+    except Exception:
+        print(" --- Submodule initalization failed")
+        print("Please run:\n\tgit submodule update --init --recursive")
+        sys.exit(1)
+    print(" --- Initialized submodule")
+
+
 VERSION, SHA = _get_version()
 _export_version(VERSION, SHA)
 
@@ -53,7 +66,7 @@ pytorch_package_version = os.getenv("PYTORCH_VERSION")
 
 pytorch_package_dep = "torch"
 if pytorch_package_version is not None:
-    pytorch_package_dep += "==" + pytorch_package_version
+    pytorch_package_dep += ">=" + pytorch_package_version
 
 
 class clean(distutils.command.clean.clean):
@@ -76,25 +89,26 @@ class clean(distutils.command.clean.clean):
                 shutil.rmtree(str(path), ignore_errors=True)
 
 
+_init_submodule()
 setup_info = dict(
     # Metadata
     name="torchtext",
     version=VERSION,
-    author="PyTorch core devs and James Bradbury",
-    author_email="jekbradbury@gmail.com",
+    author="PyTorch Text Team",
+    author_email="packages@pytorch.org",
     url="https://github.com/pytorch/text",
-    description="Text utilities and datasets for PyTorch",
+    description="Text utilities, models, transforms, and datasets for PyTorch.",
     long_description=read("README.rst"),
     license="BSD",
     install_requires=["tqdm", "requests", pytorch_package_dep, "numpy"],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     classifiers=[
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
     ],
     # Package info
-    packages=find_packages(exclude=("test*", "build_tools*")),
+    packages=find_packages(exclude=("test*", "tools*")),
     zip_safe=False,
     # Extension info
     # If you are trying to use torchtext.so and see no registered op.

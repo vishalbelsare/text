@@ -8,10 +8,6 @@ from torchtext.data.datasets_utils import (
     _create_dataset_directory,
 )
 
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, IterableWrapper
-    from torchtext._download_hooks import HttpReader
-
 URL = {
     "train": "https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json",
     "dev": "https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json",
@@ -64,6 +60,7 @@ def SQuAD1(root: str, split: Union[Tuple[str], str]):
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     url_dp = IterableWrapper([URL[split]])
     # cache data on-disk with sanity check

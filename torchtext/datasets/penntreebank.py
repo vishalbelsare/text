@@ -2,15 +2,13 @@ import os
 from functools import partial
 from typing import Tuple, Union
 
+# noqa
+
 from torchtext._internal.module_utils import is_module_available
 from torchtext.data.datasets_utils import (
     _wrap_split_argument,
     _create_dataset_directory,
 )
-
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, IterableWrapper
-    from torchtext._download_hooks import HttpReader
 
 URL = {
     "train": "https://raw.githubusercontent.com/wojzaremba/lstm/master/data/ptb.train.txt",
@@ -71,6 +69,7 @@ def PennTreebank(root, split: Union[Tuple[str], str]):
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     url_dp = IterableWrapper([URL[split]])
     cache_dp = url_dp.on_disk_cache(

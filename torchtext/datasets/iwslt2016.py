@@ -9,10 +9,6 @@ from torchtext.data.datasets_utils import (
     _wrap_split_argument,
 )
 
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, IterableWrapper
-    from torchtext._download_hooks import GDriveReader
-
 URL = "https://drive.google.com/uc?id=1l5y6Giag9aRPwGtuZHswh3w5v3qEz8D8"
 
 _PATH = "2016-01.tgz"
@@ -221,6 +217,7 @@ def IWSLT2016(
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     if not isinstance(language_pair, list) and not isinstance(language_pair, tuple):
         raise ValueError("language_pair must be list or tuple but got {} instead".format(type(language_pair)))

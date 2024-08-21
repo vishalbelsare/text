@@ -9,9 +9,6 @@ from torchtext.data.datasets_utils import (
     _create_dataset_directory,
 )
 
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, HttpReader, IterableWrapper
-
 
 URL = {
     "train": "https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_train.txt",
@@ -69,6 +66,7 @@ def MRPC(root: str, split: Union[Tuple[str], str]):
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     url_dp = IterableWrapper([URL[split]])
     # cache data on-disk with sanity check

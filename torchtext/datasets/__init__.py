@@ -1,9 +1,16 @@
+import warnings
+import torchtext
+if torchtext._WARN:
+    warnings.warn(torchtext._TORCHTEXT_DEPRECATION_MSG)
+
+
 import importlib
 
 from .ag_news import AG_NEWS
 from .amazonreviewfull import AmazonReviewFull
 from .amazonreviewpolarity import AmazonReviewPolarity
 from .cc100 import CC100
+from .cnndm import CNNDM
 from .cola import CoLA
 from .conll2000chunking import CoNLL2000Chunking
 from .dbpedia import DBpedia
@@ -62,6 +69,7 @@ DATASETS = {
     "YahooAnswers": YahooAnswers,
     "YelpReviewFull": YelpReviewFull,
     "YelpReviewPolarity": YelpReviewPolarity,
+    "CNNDM": CNNDM,
 }
 
 URLS = {}

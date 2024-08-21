@@ -9,11 +9,7 @@ from torchtext.data.datasets_utils import (
     _wrap_split_argument,
 )
 
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, IterableWrapper
-    from torchtext._download_hooks import GDriveReader
-
-URL = "https://drive.google.com/u/0/uc?id=12ycYSzLIG253AFN35Y6qoyf9wtkOjakp"
+URL = "https://fbk.sharepoint.com/sites/MTUnit/_layouts/15/download.aspx?SourceUrl=%2Fsites%2FMTUnit%2FShared%20Documents%2Fwebsites%2FWIT3%2Dlibrary%2F2017%2D01%2Dtrnmted%2Etgz"
 _PATH = "2017-01-trnmted.tgz"
 MD5 = "aca701032b1c4411afc4d9fa367796ba"
 
@@ -186,6 +182,7 @@ def IWSLT2017(root=".data", split=("train", "valid", "test"), language_pair=("de
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     valid_set = "dev2010"
     test_set = "tst2010"
@@ -240,7 +237,24 @@ def IWSLT2017(root=".data", split=("train", "valid", "test"), language_pair=("de
         filepath_fn=partial(_inner_iwslt_tar_filepath_fn, inner_iwslt_tar)
     )
     cache_decompressed_dp = cache_decompressed_dp.open_files(mode="b").load_from_tar()
-    cache_decompressed_dp = cache_decompressed_dp.end_caching(mode="wb", same_filepath_fn=True)
+    # As we had filenames duplicated, any trash files in archive can become tgz
+
+    def extracted_file_name(inner_iwslt_tar, inner_tar_name):
+        name = os.path.basename(inner_tar_name)
+        path = os.path.dirname(inner_iwslt_tar)
+        return os.path.join(path, name)
+
+    cache_decompressed_dp = cache_decompressed_dp.end_caching(
+        mode="wb", filepath_fn=partial(extracted_file_name, inner_iwslt_tar)
+    )
+    # As we corrected path, we need to leave tgz files only now and no dot files
+
+    def leave_only_tgz(file_name):
+        name = os.path.basename(file_name)
+        _, file_extension = os.path.splitext(file_name)
+        return file_extension == ".tgz" and name[0] != "."
+
+    cache_decompressed_dp = cache_decompressed_dp.filter(leave_only_tgz)
     cache_decompressed_dp_1, cache_decompressed_dp_2 = cache_decompressed_dp.fork(num_instances=2)
 
     src_filename = file_path_by_lang_and_split[src_language][split]

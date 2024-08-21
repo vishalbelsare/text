@@ -2,18 +2,14 @@
 import os
 from functools import partial
 
+# we import HttpReader from _download_hooks so we can swap out public URLs
+# with interal URLs when the dataset is used within Facebook
+
 from torchtext._internal.module_utils import is_module_available
 from torchtext.data.datasets_utils import (
     _create_dataset_directory,
     _wrap_split_argument,
 )
-
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, IterableWrapper
-
-    # we import HttpReader from _download_hooks so we can swap out public URLs
-    # with interal URLs when the dataset is used within Facebook
-    from torchtext._download_hooks import HttpReader
 
 
 URL = "https://dl.fbaipublicfiles.com/glue/data/SST-2.zip"
@@ -88,6 +84,7 @@ def SST2(root, split):
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     url_dp = IterableWrapper([URL])
     cache_compressed_dp = url_dp.on_disk_cache(

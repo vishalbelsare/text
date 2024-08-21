@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class PositionalEmbedding(Module):
-    def __init__(self, num_embeddings: int, embedding_dim: int, pad_index: int):
+    def __init__(self, num_embeddings: int, embedding_dim: int, pad_index: int) -> None:
         super().__init__()
         self.embedding = nn.Embedding(num_embeddings, embedding_dim, pad_index)
         self.pad_index = pad_index
@@ -38,7 +38,7 @@ class TransformerEncoderLayer(Module):
         dropout: float = 0.1,
         normalize_before: bool = False,
         scaling: Optional[float] = None,
-    ):
+    ) -> None:
         super().__init__()
         # TODO Manually setting scaling is not allowed
         ffn_dimension = ffn_dimension or embedding_dim * 4
@@ -106,7 +106,7 @@ class TransformerEncoder(Module):
         normalize_before: bool = False,
         scaling: Optional[float] = None,
         return_all_layers: bool = False,
-    ):
+    ) -> None:
         super().__init__()
         self.padding_idx = padding_idx
         self.token_embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx)
@@ -120,7 +120,12 @@ class TransformerEncoder(Module):
             batch_first=True,
             norm_first=normalize_before,
         )
-        self.layers = torch.nn.TransformerEncoder(encoder_layer=layer, num_layers=num_encoder_layers)
+        self.layers = torch.nn.TransformerEncoder(
+            encoder_layer=layer,
+            num_layers=num_encoder_layers,
+            enable_nested_tensor=True,
+            mask_check=False,
+        )
         self.positional_embedding = PositionalEmbedding(max_seq_len, embedding_dim, padding_idx)
         self.embedding_layer_norm = nn.LayerNorm(embedding_dim)
         self.dropout = nn.Dropout(dropout)
@@ -149,10 +154,8 @@ class TransformerEncoder(Module):
             embedded = self.embedding_layer_norm(embedded)
         embedded = self.dropout(embedded)
 
-        padded_embedded = embedded * (1 - padding_mask.unsqueeze(-1).type_as(embedded))
-
         if self.return_all_layers:
-            encoded = padded_embedded
+            encoded = embedded
             # B x T x C
             # Then transpose back to T x B x C
             states = [encoded.transpose(1, 0)]
@@ -167,7 +170,7 @@ class TransformerEncoder(Module):
         else:
             # B x T x C
             # Then transpose back to T x B x C
-            encoded = self.layers(padded_embedded, src_key_padding_mask=padding_mask).transpose(1, 0)
+            encoded = self.layers(embedded, src_key_padding_mask=padding_mask).transpose(1, 0)
             if self.normalize_before:
                 encoded = self.embedding_layer_norm(encoded)
             return encoded

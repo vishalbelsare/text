@@ -42,7 +42,7 @@ torchtext.datasets
       - All workers (DDP workers *and* DataLoader workers) see a different part
         of the data. The datasets are already wrapped inside  `ShardingFilter
         <https://pytorch.org/data/main/generated/torchdata.datapipes.iter.ShardingFilter.html>`_
-        and you may need to call ``dp.apply_sharing(num_shards, shard_id)`` in order to shard the
+        and you may need to call ``dp.apply_sharding(num_shards, shard_id)`` in order to shard the
         data across ranks (DDP workers) and DataLoader workers. One way to do this
         is to create ``worker_init_fn`` that calls ``apply_sharding`` with appropriate
         number of shards (DDP workers * DataLoader workers) and shard id (inferred through rank
@@ -73,7 +73,8 @@ General use cases are as follows: ::
     for label, line in train_iter:
         tokens += tokenize(label, line)
 
-The following datasets are available:
+The following datasets are currently available. If you would like to contribute
+new datasets to the repo or work with your own custom datasets, please refer to `CONTRIBUTING_DATASETS.md <https://github.com/pytorch/text/blob/main/CONTRIBUTING_DATASETS.md>`_ guide.
 
 .. contents:: Datasets
     :local:

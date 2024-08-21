@@ -7,10 +7,6 @@ from torchtext._internal.module_utils import is_module_available
 from torchtext.data.datasets_utils import _create_dataset_directory
 from torchtext.data.datasets_utils import _wrap_split_argument
 
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, IterableWrapper
-    from torchtext._download_hooks import HttpReader
-
 URL = "http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz"
 
 MD5 = "7c2ac02c03563afcf9b574c7e56c153a"
@@ -19,6 +15,8 @@ NUM_LINES = {
     "train": 25000,
     "test": 25000,
 }
+
+MAP_LABELS = {"neg": 1, "pos": 2}
 
 _PATH = "aclImdb_v1.tar.gz"
 
@@ -30,7 +28,7 @@ def _filepath_fn(root, _=None):
 
 
 def _decompressed_filepath_fn(root, decompressed_folder, split, labels, _=None):
-    return [os.path.join(root, decompressed_folder, split, label) for label in labels]
+    return os.path.join(root, decompressed_folder, split)
 
 
 def _filter_fn(filter_imdb_data, split, t):
@@ -50,7 +48,7 @@ def _cache_filepath_fn(root, decompressed_folder, split, x):
 
 
 def _modify_res(t):
-    return Path(t[0]).parts[-1], t[1]
+    return MAP_LABELS[Path(t[0]).parts[-1]], t[1]
 
 
 def filter_imdb_data(key, fname):
@@ -89,6 +87,7 @@ def IMDB(root: str, split: Union[Tuple[str], str]):
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     url_dp = IterableWrapper([URL])
 

@@ -1,7 +1,14 @@
+import warnings
+import torchtext
+if torchtext._WARN:
+    warnings.warn(torchtext._TORCHTEXT_DEPRECATION_MSG)
+
+
 import json
+import re
 from copy import deepcopy
 from functools import lru_cache
-from typing import Any, List, Optional, Union
+from typing import Any, List, Mapping, Optional, Sequence, Tuple, Union
 
 import torch
 import torchtext  # noqa: F401
@@ -29,6 +36,7 @@ __all__ = [
     "PadTransform",
     "StrToIntTransform",
     "GPT2BPETokenizer",
+    "CharBPETokenizer",
     "RegexTokenizer",
     "Sequential",
 ]
@@ -38,7 +46,7 @@ class SentencePieceTokenizer(Module):
     """
     Transform for Sentence Piece tokenizer from pre-trained sentencepiece model
 
-    Additiona details: https://github.com/google/sentencepiece
+    Additional details: https://github.com/google/sentencepiece
 
     :param sp_model_path: Path to pre-trained sentencepiece model
     :type sp_model_path: str
@@ -49,7 +57,7 @@ class SentencePieceTokenizer(Module):
         >>> transform(["hello world", "attention is all you need!"])
     """
 
-    def __init__(self, sp_model_path: str):
+    def __init__(self, sp_model_path: str) -> None:
         super().__init__()
         self.sp_model = load_sp_model(get_asset_local_path(sp_model_path))
 
@@ -58,7 +66,7 @@ class SentencePieceTokenizer(Module):
         :param input: Input sentence or list of sentences on which to apply tokenizer.
         :type input: Union[str, List[str]]
         :return: tokenized text
-        :rtype: Union[List[str], List[List(str)]]
+        :rtype: Union[List[str], List[List[str]]]
         """
         if torch.jit.isinstance(input, List[str]):
             tokens: List[List[str]] = []
@@ -87,7 +95,7 @@ class VocabTransform(Module):
         >>> jit_vocab_transform = torch.jit.script(vocab_transform)
     """
 
-    def __init__(self, vocab: Vocab):
+    def __init__(self, vocab: Vocab) -> None:
         super().__init__()
         assert isinstance(vocab, Vocab)
         self.vocab = vocab
@@ -151,7 +159,7 @@ class LabelToIndex(Module):
         label_names: Optional[List[str]] = None,
         label_path: Optional[str] = None,
         sort_names=False,
-    ):
+    ) -> None:
         assert label_names or label_path, "label_names or label_path is required"
         assert not (label_names and label_path), "label_names and label_path are mutually exclusive"
         super().__init__()
@@ -238,7 +246,7 @@ class PadTransform(Module):
     :type pad_value: bool
     """
 
-    def __init__(self, max_length: int, pad_value: int):
+    def __init__(self, max_length: int, pad_value: int) -> None:
         super().__init__()
         self.max_length = max_length
         self.pad_value = float(pad_value)
@@ -260,7 +268,7 @@ class PadTransform(Module):
 class StrToIntTransform(Module):
     """Convert string tokens to integers (either single sequence or batch)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     def forward(self, input: Any) -> Any:
@@ -288,10 +296,20 @@ class GPT2BPETokenizer(Module):
     :type return_input: bool
     """
 
+    SPECIAL_TOKENS_ATTRIBUTES = [
+        "bos_token",
+        "eos_token",
+        "unk_token",
+        "sep_token",
+        "pad_token",
+        "cls_token",
+        "mask_token",
+        "additional_special_tokens",
+    ]
     __jit_unused_properties__ = ["is_jitable"]
     _seperator: torch.jit.Final[str]
 
-    def __init__(self, encoder_json_path: str, vocab_bpe_path: str, return_tokens: bool = False):
+    def __init__(self, encoder_json_path: str, vocab_bpe_path: str, return_tokens: bool = False) -> None:
         super().__init__()
         self._seperator = "\u0001"
         # load bpe encoder and bpe decoder
@@ -349,6 +367,26 @@ class GPT2BPETokenizer(Module):
         """
         return self.bpe.tokenize(text)
 
+    def add_special_tokens(self, special_tokens_dict: Mapping[str, Union[str, Sequence[str]]]) -> int:
+        """Add a dictionary of special tokens (eos, pad, cls…) to the encoder
+
+        :param special_tokens_dict: dict of string. Keys should be in the list of predefined special attributes:
+        [bos_token, eos_token, unk_token, sep_token, pad_token, cls_token, mask_token, additional_special_tokens].
+        Tokens are only added if they are not already in the vocabulary.
+        :type special_tokens_dict: Dict[str, Union[str, List[str]]]
+        :return: Number of tokens added to the vocabulary.
+        :rtype: int
+        """
+        for key in special_tokens_dict.keys():
+            assert (
+                key in self.SPECIAL_TOKENS_ATTRIBUTES
+            ), f"Key '{key}' is not in the special token list: {self.SPECIAL_TOKENS_ATTRIBUTES}"
+
+        return self.bpe.add_special_tokens(
+            {k: v for k, v in special_tokens_dict.items() if k != "additional_special_tokens"},
+            special_tokens_dict.get("additional_special_tokens", []),
+        )
+
     def forward(self, input: Any) -> Any:
         """
         :param input: Input sentence or list of sentences on which to apply tokenizer.
@@ -382,6 +420,223 @@ class GPT2BPETokenizer(Module):
             )
             return tokenizer_copy
         return self
+
+    @torch.jit.export
+    def decode(self, tokens: List[str]) -> str:
+        """Return a decoded string given a list of string token ids.
+
+        :param input: A list of strings, each string corresponds to token ids.
+        :type input: List[str]
+        :return: decoded text
+        :rtype: str
+        """
+        return self.bpe.decode([int(token) for token in tokens])
+
+
+def get_pairs(word):
+    """
+    Return set of symbol pairs in a word.
+    Word is represented as tuple of symbols (symbols being variable-length strings).
+    """
+    pairs = set()
+    prev_char = word[0]
+    for char in word[1:]:
+        pairs.add((prev_char, char))
+        prev_char = char
+    return pairs
+
+
+class CharBPETokenizer(Module):
+    """
+    Transform for a Character Byte-Pair-Encoding Tokenizer.
+
+    Args:
+        :param bpe_encoder_path: Path to the BPE encoder json file.
+        :type bpe_encoder_path: str
+        :param bpe_merges_path: Path to the BPE merges text file.
+        :type bpe_merges_path: str
+        :param return_tokens: Indicate whether to return split tokens. If False, it will return encoded token IDs (default: False).
+        :type return_tokens: bool
+        :param unk_token: The unknown token. If provided, it must exist in encoder.
+        :type unk_token: Optional[str]
+        :param suffix: The suffix to be used for every subword that is an end-of-word.
+        :type suffix: Optional[str]
+        :param special_tokens: Special tokens which should not be split into individual characters. If provided, these must exist in encoder.
+        :type special_tokens: Optional[List[str]]
+    """
+
+    def __init__(
+        self,
+        bpe_encoder_path: str,
+        bpe_merges_path: str,
+        return_tokens: bool = False,
+        unk_token: Optional[str] = None,
+        suffix: Optional[str] = None,
+        special_tokens: Optional[List[str]] = None,
+    ):
+        super().__init__()
+        with open(get_asset_local_path(bpe_encoder_path), "r") as f:
+            self._encoder = dict(json.load(f))
+        with open(get_asset_local_path(bpe_merges_path), "r", encoding="utf-8") as f:
+            bpe_data = f.read()
+
+        merges = [tuple(merge_str.split()) for merge_str in bpe_data.split("\n")[1:-1]]
+        self._decoder = {v: k for k, v in self._encoder.items()}
+        self._bpe_ranks = dict(zip(merges, range(len(merges))))
+        self._return_tokens = return_tokens
+        self._cache = {}
+        self._pat = r"\S+\n?"
+        if unk_token and unk_token not in self._encoder:
+            raise RuntimeError(
+                "Unknown token {} not found in encoder. Special tokens must be in encoder.".format(unk_token)
+            )
+        self._unk_token = unk_token
+        self._suffix = suffix
+        if special_tokens:
+            for token in special_tokens:
+                if token not in self._encoder:
+                    raise RuntimeError(
+                        "Special token {} not found in encoder. Special tokens must be in encoder.".format(token)
+                    )
+                else:
+                    self._cache[token] = token
+
+    @property
+    def vocab_size(self):
+        return len(self._encoder)
+
+    def _bpe(self, token):
+        """Splits the input token into bpe tokens. The output depends on the encoder and merge list specified in the class
+        constructor. For example, _bpe("pytorch") may return "p y t o r c h" or "py tor ch" or "pytorch" depending on which
+        merges exist.
+
+        Args:
+            text: An input text string.
+
+        Returns:
+            A string of space separated bpe tokens.
+        """
+        if token in self._cache:
+            return self._cache[token]
+
+        if self._suffix:
+            word = tuple(token[:-1]) + (token[-1] + self._suffix,)
+        else:
+            word = tuple(token)
+
+        pairs = get_pairs(word)
+
+        if not pairs:
+            if self._suffix:
+                return token + self._suffix
+            else:
+                return token
+
+        while True:
+            bigram = min(pairs, key=lambda pair: self._bpe_ranks.get(pair, float("inf")))
+            if bigram not in self._bpe_ranks:
+                break
+            first, second = bigram
+            new_word = []
+            i = 0
+            while i < len(word):
+                try:
+                    j = word.index(first, i)
+                except ValueError:
+                    new_word.extend(word[i:])
+                    break
+                else:
+                    new_word.extend(word[i:j])
+                    i = j
+
+                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
+                    new_word.append(first + second)
+                    i += 2
+                else:
+                    new_word.append(word[i])
+                    i += 1
+            new_word = tuple(new_word)
+            word = new_word
+            if len(word) == 1:
+                break
+            else:
+                pairs = get_pairs(word)
+        word = " ".join(word)
+        self._cache[token] = word
+        return word
+
+    def encode(self, text: str) -> Union[List[int], List[str]]:
+        """Encode text into a list of tokens IDs
+
+        Args:
+            text: An input text string.
+
+        Returns:
+            A list of bpe token ids represents each bpe token. Return type depends on provided encoder file.
+        """
+        encoded_tokens = [
+            self._encoder.get(bpe_token, self._encoder.get(self._unk_token))
+            if self._unk_token
+            else self._encoder[bpe_token]
+            for bpe_token in self._tokenize(text)
+        ]
+        return encoded_tokens
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Tokenize text into a list of tokens
+
+        Args:
+            text: An input text string.
+
+        Returns:
+            A list of bpe token strings
+        """
+        tokens = []
+        for token in re.findall(self._pat, text):
+            tokens.extend(bpe_token for bpe_token in self._bpe(token).split(" "))
+        return tokens
+
+    def decode(self, tokens: Union[List[int], List[str]]) -> str:
+        """Decode a list of token IDs into a string
+
+        Args:
+            token: A list of IDs (either str or int depending on encoder json)
+
+        Returns:
+            A decoded string
+        """
+        decoded_list = [
+            self._decoder.get(token, self._unk_token) if self._unk_token else self._decoder[token] for token in tokens
+        ]
+        if self._suffix:
+            return "".join(decoded_list).replace(self._suffix, " ")
+        else:
+            return " ".join(decoded_list)
+
+    def forward(self, input: Union[str, List[str]]) -> Union[List, List[List]]:
+        """Forward method of module encodes strings or list of strings into token ids
+
+        Args:
+            input: Input sentence or list of sentences on which to apply tokenizer.
+
+        Returns:
+            A list or list of lists of token IDs
+        """
+        if isinstance(input, List):
+            tokens: List[List[str]] = []
+            for text in input:
+                if self._return_tokens:
+                    tokens.append(self._tokenize(text))
+                else:
+                    tokens.append(self.encode(text))
+            return tokens
+        elif isinstance(input, str):
+            if self._return_tokens:
+                return self._tokenize(input)
+            else:
+                return self.encode(input)
+        else:
+            raise TypeError("Input type not supported")
 
 
 class CLIPTokenizer(Module):
@@ -425,7 +680,7 @@ class CLIPTokenizer(Module):
         encoder_json_path: Optional[str] = None,
         num_merges: Optional[int] = None,
         return_tokens: bool = False,
-    ):
+    ) -> None:
         super().__init__()
         self._seperator = "\u0001"
         # load bpe merges
@@ -564,19 +819,31 @@ class BERTTokenizer(Module):
     :type strip_accents: Optional[bool]
     :param return_tokens: Indicate whether to return tokens. If false, returns corresponding token IDs as strings (default: False)
     :type return_tokens: bool
+    :param never_split: Collection of tokens which will not be split during tokenization. (default: None)
+    :type never_split: Optional[List[str]]
     """
 
     __jit_unused_properties__ = ["is_jitable"]
 
     def __init__(
-        self, vocab_path: str, do_lower_case: bool = True, strip_accents: Optional[bool] = None, return_tokens=False
+        self,
+        vocab_path: str,
+        do_lower_case: bool = True,
+        strip_accents: Optional[bool] = None,
+        return_tokens=False,
+        never_split: Optional[List[str]] = None,
     ) -> None:
         super().__init__()
-        self.bert_model = BERTEncoderPyBind(get_asset_local_path(vocab_path), do_lower_case, strip_accents)
+        if never_split is None:
+            never_split = []
+        self.bert_model = BERTEncoderPyBind(
+            get_asset_local_path(vocab_path, overwrite=True), do_lower_case, strip_accents, never_split
+        )
         self._return_tokens = return_tokens
         self._vocab_path = vocab_path
         self._do_lower_case = do_lower_case
         self._strip_accents = strip_accents
+        self._never_split = never_split
 
     @property
     def is_jitable(self):
@@ -652,7 +919,7 @@ class BERTTokenizer(Module):
         if not self.is_jitable:
             tokenizer_copy = deepcopy(self)
             tokenizer_copy.bert_model = torch.classes.torchtext.BERTEncoder(
-                self._vocab_path, self._do_lower_case, self._strip_accents
+                self._vocab_path, self._do_lower_case, self._strip_accents, self._never_split
             )
             return tokenizer_copy
 
@@ -660,26 +927,42 @@ class BERTTokenizer(Module):
 
 
 class RegexTokenizer(Module):
-    __jit_unused_properties__ = ["is_jitable"]
-    r"""Regex tokenizer for a string sentence that applies all regex replacements defined in patterns_list.
+    """
+    Regex tokenizer for a string sentence that applies all regex replacements defined in patterns_list. It is backed by the `C++ RE2 regular expression engine <https://github.com/google/re2>`_ from Google.
 
     Args:
         patterns_list (List[Tuple[str, str]]): a list of tuples (ordered pairs) which contain the regex pattern string
         as the first element and the replacement string as the second element.
 
-    Examples:
-        >>> import torch
-        >>> from torchtext.transforms import RegexTokenizer
-        >>> test_sample = 'Basic Regex Tokenization for a Line of Text'
-        >>> patterns_list = [
-            (r'\'', ' \'  '),
-            (r'\"', '')]
-        >>> reg_tokenizer = RegexTokenizer(patterns_list)
-        >>> jit_reg_tokenizer = torch.jit.script(reg_tokenizer)
-        >>> tokens = jit_reg_tokenizer(test_sample)
+    Caveats
+        - The RE2 library does not support arbitrary lookahead or lookbehind assertions, nor does it support backreferences. Look at the `docs <https://swtch.com/~rsc/regexp/regexp3.html#caveats>`_ here for more info.
+        - The final tokenization step always uses spaces as separators. To split strings based on a specific regex pattern, similar to Python's `re.split <https://docs.python.org/3/library/re.html#re.split>`_, a tuple of ``('<regex_pattern>', ' ')`` can be provided.
+
+    Example
+        Regex tokenization based on ``(patterns, replacements)`` list.
+            >>> import torch
+            >>> from torchtext.transforms import RegexTokenizer
+            >>> test_sample = 'Basic Regex Tokenization for a Line of Text'
+            >>> patterns_list = [
+                (r'\'', ' \'  '),
+                (r'\"', '')]
+            >>> reg_tokenizer = RegexTokenizer(patterns_list)
+            >>> jit_reg_tokenizer = torch.jit.script(reg_tokenizer)
+            >>> tokens = jit_reg_tokenizer(test_sample)
+        Regex tokenization based on ``(single_pattern, ' ')`` list.
+            >>> import torch
+            >>> from torchtext.transforms import RegexTokenizer
+            >>> test_sample = 'Basic.Regex,Tokenization_for+a..Line,,of  Text'
+            >>> patterns_list = [
+                (r'[,._+ ]+', r' ')]
+            >>> reg_tokenizer = RegexTokenizer(patterns_list)
+            >>> jit_reg_tokenizer = torch.jit.script(reg_tokenizer)
+            >>> tokens = jit_reg_tokenizer(test_sample)
     """
 
-    def __init__(self, patterns_list):
+    __jit_unused_properties__ = ["is_jitable"]
+
+    def __init__(self, patterns_list) -> None:
         super(RegexTokenizer, self).__init__()
         patterns = [pair[0] for pair in patterns_list]
         replacements = [pair[1] for pair in patterns_list]
@@ -722,7 +1005,7 @@ def bytes_to_unicode():
     The reversible bpe codes work on unicode strings.
     This means you need a large # of unicode characters in your vocab if you want to avoid UNKs.
     When you're at something like a 10B token dataset you end up needing around 5K for decent coverage.
-    This is a signficant percentage of your normal, say, 32K bpe vocab.
+    This is a significant percentage of your normal, say, 32K bpe vocab.
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
@@ -749,3 +1032,144 @@ class Sequential(torch.nn.Sequential):
         for module in self:
             input = module(input)
         return input
+
+
+class MaskTransform(torch.nn.Module):
+    """
+    The transform chooses mask_prob% (example 15%) of the token positions at random for
+    prediction.
+
+    If the i-th token is chosen, we replace the i-th token with
+    (1) the [MASK] token 80% of the time
+    (2) a random token 10% of the time
+    (3) the unchanged i-th token 10% of the time.
+
+    Args:
+        vocab_len (int): the length of the vocabulary, including special tokens such as [BOS], [PAD], [MASK]
+        mask_idx (int): index assigned to mask token in vocabulary
+        bos_idx (int): index assigned to beginning-of-sequence token in vocabulary
+        pad_idx (int): index assigned to padding token in vocabulary
+        mask_bos (bool): indicate whether beginning-of-sequence tokens are eligible for masking (default: False)
+        mask_prob (float): probability that a token is chosen for replacement (default: 0.15)
+
+    Example:
+        >>> import torch
+        >>> from torchtext.transforms import MaskTransform
+        >>> sample_tokens = [
+                ["[BOS]", "a", "b", "c", "d"],
+                ["[BOS]", "a", "b", "[PAD]", "[PAD]"]
+            ]
+        >>> sample_token_ids = torch.tensor([
+                [6, 0, 1, 2, 3], [6, 0, 1, 4, 4]
+            ])
+        >>> mask_transform = MaskTransform(
+                vocab_len = 7,
+                mask_idx = 4,
+                bos_idx = 6,
+                pad_idx = 5,
+                mask_bos = False,
+                mask_prob = 0.15
+            )
+        >>> masked_tokens, target_tokens, mask = mask_transform(sample_token_ids)
+    """
+
+    # maks_mask_prob is prob. of replacing a token with [MASK] (ex. 80%)
+    mask_mask_prob = 0.8
+
+    # rand_mask_thresh is prob. of replacing a token with a random token. (ex.10%)
+    rand_mask_prob = 0.1
+
+    def __init__(
+        self,
+        vocab_len: int,
+        mask_idx: int,
+        bos_idx: int,
+        pad_idx: int,
+        mask_bos: bool = False,
+        mask_prob: float = 0.15,
+    ):
+        super().__init__()
+        self.vocab_len = vocab_len
+        self.mask_idx = mask_idx
+        self.bos_idx = bos_idx
+        self.pad_idx = pad_idx
+        self.mask_prob = mask_prob
+        self.mask_bos = mask_bos
+
+    def forward(self, tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Applies mask to input tokens.
+
+        Inputs:
+            tokens: Tensor with token ids of shape (batch_size x seq_len). Includes token ids for special tokens such as [BOS] and [PAD]
+
+        Outputs:
+            masked_tokens: Tensor of tokens after masking has been applied
+            target_tokens: Tensor of token values selected for masking
+            mask: Tensor with same shape as input tokens (batch_size x seq_len)
+                with masked tokens represented by a 1 and everything else as 0.
+        """
+        # tokens, mask, mask_mask, rand_mask: (T, C)
+        mask, mask_mask, rand_mask = self._generate_mask(tokens)
+
+        # a. generate the masked input tokens
+        # (1) the [MASK] token 80% of the time
+        masked_tokens = self._mask_input(tokens, mask_mask, self.mask_idx)
+        # (2) a random token 10% of the time
+        masked_tokens = self._mask_input(
+            masked_tokens,
+            rand_mask,
+            torch.randint_like(tokens, high=self.vocab_len),
+        )
+
+        # b. generate the target prediction
+        target_tokens = torch.masked_select(tokens, mask.bool())
+
+        # masked_tokens: (T, C), target_tokens: (T x C x mask_prob, ), mask
+        return masked_tokens, target_tokens, mask
+
+    def _random_masking(self, tokens: torch.tensor, mask_prob: float) -> torch.Tensor:
+        """
+        Function to mask tokens randomly.
+
+        Inputs:
+            1) tokens: Tensor with token ids of shape (batch_size x seq_len). Includes token ids for special tokens such as [BOS] and [PAD]
+            2) mask_prob: Probability of masking a particular token
+
+        Outputs:
+            mask: Tensor with same shape as input tokens (batch_size x seq_len)
+                with masked tokens represented by a 1 and everything else as 0.
+        """
+        batch_size, seq_len = tokens.size()
+        num_masked_per_seq = int(seq_len * mask_prob)
+
+        mask = torch.zeros((batch_size, seq_len), dtype=torch.int).to(tokens.device)
+        mask[:, :num_masked_per_seq] = 1
+        for i in range(batch_size):
+            mask[i] = mask[i, torch.randperm(seq_len)]
+
+        return mask
+
+    def _select_tokens_to_mask(self, tokens: torch.Tensor, mask_prob: float) -> torch.Tensor:
+        mask = self._random_masking(tokens, mask_prob)
+        if not self.mask_bos:
+            mask *= (tokens != self.bos_idx).long()
+        return mask
+
+    def _generate_mask(self, tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # chooses mask_prob% of the token positions at random
+        mask = self._select_tokens_to_mask(tokens, self.mask_prob)
+        # not mask the pad token
+        mask *= (tokens != self.pad_idx).long()
+        # keep one masked token to avoid failure in the loss calculation.
+        mask[0, 0] = 1 if not mask.byte().any() else mask[0, 0]
+
+        probs = torch.rand_like(tokens, dtype=torch.float)
+        # (1) the [MASK] token 80% of the time
+        mask_mask = (probs >= (1 - self.mask_mask_prob)).long() * mask
+        # (2) a random token 10% of the time
+        rand_mask = (probs < self.rand_mask_prob).long() * mask
+        return mask, mask_mask, rand_mask
+
+    def _mask_input(self, tokens: torch.Tensor, mask: torch.Tensor, replacement) -> torch.Tensor:
+        return tokens * (1 - mask) + replacement * mask

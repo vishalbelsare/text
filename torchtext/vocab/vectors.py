@@ -31,8 +31,8 @@ def _infer_shape(f):
     return num_lines, vector_dim
 
 
-class Vectors(object):
-    def __init__(self, name, cache=None, url=None, unk_init=None, max_vectors=None):
+class Vectors:
+    def __init__(self, name, cache=None, url=None, unk_init=None, max_vectors=None) -> None:
         """
         Args:
 
@@ -63,6 +63,9 @@ class Vectors(object):
             return self.vectors[self.stoi[token]]
         else:
             return self.unk_init(torch.Tensor(self.dim))
+
+    def __contains__(self, token):
+        return token in self.stoi
 
     def cache(self, name, cache, url=None, max_vectors=None):
         import ssl
@@ -214,7 +217,7 @@ class GloVe(Vectors):
         "6B": "http://nlp.stanford.edu/data/glove.6B.zip",
     }
 
-    def __init__(self, name="840B", dim=300, **kwargs):
+    def __init__(self, name="840B", dim=300, **kwargs) -> None:
         url = self.url[name]
         name = "glove.{}.{}d.txt".format(name, str(dim))
         super(GloVe, self).__init__(name, url=url, **kwargs)
@@ -224,7 +227,7 @@ class FastText(Vectors):
 
     url_base = "https://dl.fbaipublicfiles.com/fasttext/vectors-wiki/wiki.{}.vec"
 
-    def __init__(self, language="en", **kwargs):
+    def __init__(self, language="en", **kwargs) -> None:
         url = self.url_base.format(language)
         name = os.path.basename(url)
         super(FastText, self).__init__(name, url=url, **kwargs)
@@ -235,7 +238,7 @@ class CharNGram(Vectors):
     name = "charNgram.txt"
     url = "http://www.logos.t.u-tokyo.ac.jp/~hassy/publications/arxiv2016jmt/" "jmt_pre-trained_embeddings.tar.gz"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super(CharNGram, self).__init__(self.name, url=self.url, **kwargs)
 
     def __getitem__(self, token):

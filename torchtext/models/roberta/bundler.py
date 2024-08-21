@@ -72,7 +72,7 @@ class RobertaBundle:
         freeze_encoder: bool = False,
         dl_kwargs: Dict[str, Any] = None,
     ) -> RobertaModel:
-        r"""get_model(head: Optional[torch.nn.Module] = None, load_weights: bool = True, freeze_encoder: bool = False, *, dl_kwargs=None) -> torctext.models.RobertaModel
+        r"""get_model(head: Optional[torch.nn.Module] = None, load_weights: bool = True, freeze_encoder: bool = False, *, dl_kwargs=None) -> torchtext.models.RobertaModel
 
         Args:
             head (nn.Module): A module to be attached to the encoder to perform specific task. If provided, it will replace the default member head (Default: ``None``)
@@ -160,16 +160,35 @@ class RobertaBundle:
         return self._encoder_conf
 
 
+def xlmr_transform(truncate_length: int) -> Module:
+    """Standard transform for XLMR models."""
+    return T.Sequential(
+        T.SentencePieceTokenizer(urljoin(_TEXT_BUCKET, "xlmr.sentencepiece.bpe.model")),
+        T.VocabTransform(load_state_dict_from_url(urljoin(_TEXT_BUCKET, "xlmr.vocab.pt"))),
+        T.Truncate(truncate_length),
+        T.AddToken(token=0, begin=True),
+        T.AddToken(token=2, begin=False),
+    )
+
+
+def roberta_transform(truncate_length: int) -> Module:
+    """Standard transform for RoBERTa models."""
+    return T.Sequential(
+        T.GPT2BPETokenizer(
+            encoder_json_path=urljoin(_TEXT_BUCKET, "gpt2_bpe_encoder.json"),
+            vocab_bpe_path=urljoin(_TEXT_BUCKET, "gpt2_bpe_vocab.bpe"),
+        ),
+        T.VocabTransform(load_state_dict_from_url(urljoin(_TEXT_BUCKET, "roberta.vocab.pt"))),
+        T.Truncate(truncate_length),
+        T.AddToken(token=0, begin=True),
+        T.AddToken(token=2, begin=False),
+    )
+
+
 XLMR_BASE_ENCODER = RobertaBundle(
     _path=urljoin(_TEXT_BUCKET, "xlmr.base.encoder.pt"),
     _encoder_conf=RobertaEncoderConf(vocab_size=250002),
-    transform=lambda: T.Sequential(
-        T.SentencePieceTokenizer(urljoin(_TEXT_BUCKET, "xlmr.sentencepiece.bpe.model")),
-        T.VocabTransform(load_state_dict_from_url(urljoin(_TEXT_BUCKET, "xlmr.vocab.pt"))),
-        T.Truncate(254),
-        T.AddToken(token=0, begin=True),
-        T.AddToken(token=2, begin=False),
-    ),
+    transform=lambda: xlmr_transform(254),
 )
 
 XLMR_BASE_ENCODER.__doc__ = """
@@ -193,13 +212,7 @@ XLMR_LARGE_ENCODER = RobertaBundle(
     _encoder_conf=RobertaEncoderConf(
         vocab_size=250002, embedding_dim=1024, ffn_dimension=4096, num_attention_heads=16, num_encoder_layers=24
     ),
-    transform=lambda: T.Sequential(
-        T.SentencePieceTokenizer(urljoin(_TEXT_BUCKET, "xlmr.sentencepiece.bpe.model")),
-        T.VocabTransform(load_state_dict_from_url(urljoin(_TEXT_BUCKET, "xlmr.vocab.pt"))),
-        T.Truncate(510),
-        T.AddToken(token=0, begin=True),
-        T.AddToken(token=2, begin=False),
-    ),
+    transform=lambda: xlmr_transform(510),
 )
 
 XLMR_LARGE_ENCODER.__doc__ = """
@@ -221,16 +234,7 @@ XLMR_LARGE_ENCODER.__doc__ = """
 ROBERTA_BASE_ENCODER = RobertaBundle(
     _path=urljoin(_TEXT_BUCKET, "roberta.base.encoder.pt"),
     _encoder_conf=RobertaEncoderConf(vocab_size=50265),
-    transform=lambda: T.Sequential(
-        T.GPT2BPETokenizer(
-            encoder_json_path=urljoin(_TEXT_BUCKET, "gpt2_bpe_encoder.json"),
-            vocab_bpe_path=urljoin(_TEXT_BUCKET, "gpt2_bpe_vocab.bpe"),
-        ),
-        T.VocabTransform(load_state_dict_from_url(urljoin(_TEXT_BUCKET, "roberta.vocab.pt"))),
-        T.Truncate(254),
-        T.AddToken(token=0, begin=True),
-        T.AddToken(token=2, begin=False),
-    ),
+    transform=lambda: roberta_transform(254),
 )
 
 ROBERTA_BASE_ENCODER.__doc__ = """
@@ -263,16 +267,7 @@ ROBERTA_LARGE_ENCODER = RobertaBundle(
         num_attention_heads=16,
         num_encoder_layers=24,
     ),
-    transform=lambda: T.Sequential(
-        T.GPT2BPETokenizer(
-            encoder_json_path=urljoin(_TEXT_BUCKET, "gpt2_bpe_encoder.json"),
-            vocab_bpe_path=urljoin(_TEXT_BUCKET, "gpt2_bpe_vocab.bpe"),
-        ),
-        T.VocabTransform(load_state_dict_from_url(urljoin(_TEXT_BUCKET, "roberta.vocab.pt"))),
-        T.Truncate(510),
-        T.AddToken(token=0, begin=True),
-        T.AddToken(token=2, begin=False),
-    ),
+    transform=lambda: roberta_transform(510),
 )
 
 ROBERTA_LARGE_ENCODER.__doc__ = """
@@ -291,6 +286,34 @@ ROBERTA_LARGE_ENCODER.__doc__ = """
     and redistributed with the same license.
     [`License <https://github.com/pytorch/fairseq/blob/main/LICENSE>`__,
     `Source <https://github.com/pytorch/fairseq/tree/main/examples/roberta#pre-trained-models>`__]
+
+    Please refer to :func:`torchtext.models.RobertaBundle` for the usage.
+    """
+
+
+ROBERTA_DISTILLED_ENCODER = RobertaBundle(
+    _path=urljoin(_TEXT_BUCKET, "roberta.distilled.encoder.pt"),
+    _encoder_conf=RobertaEncoderConf(
+        num_encoder_layers=6,
+        padding_idx=1,
+    ),
+    transform=lambda: roberta_transform(510),
+)
+
+ROBERTA_DISTILLED_ENCODER.__doc__ = """
+    Roberta Encoder with Distilled Weights
+
+    DistilRoBERTa is trained using knowledge distillation, a technique to compress a large
+    model called the teacher into a smaller model called the student. By distillating RoBERTa,
+    a smaller and faster Transformer model is obtained while maintaining most of the performance.
+
+    DistilRoBERTa was pretrained solely on OpenWebTextCorpus, a reproduction of OpenAI's WebText dataset.
+    On average DistilRoBERTa is twice as fast as RoBERTa Base.
+
+    Originally published by Hugging Face under the Apache 2.0 License
+    and redistributed with the same license.
+    [`License <https://www.apache.org/licenses/LICENSE-2.0>`__,
+    `Source <https://github.com/huggingface/transformers/tree/main/examples/research_projects/distillation>`__]
 
     Please refer to :func:`torchtext.models.RobertaBundle` for the usage.
     """

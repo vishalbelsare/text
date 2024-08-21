@@ -1,3 +1,4 @@
+#include <torch/csrc/jit/python/utf8_decoding_ignore.h>
 #include <torch/script.h>
 #include <torchtext/csrc/bert_tokenizer.h> // @manual
 #include <torchtext/csrc/clip_tokenizer.h> // @manual
@@ -66,6 +67,7 @@ TORCH_LIBRARY_FRAGMENT(torchtext, m) {
           },
           // __setstate__
           [](torch::Tensor state) -> c10::intrusive_ptr<SentencePiece> {
+            state = state.to(at::kCPU);
             auto* data = static_cast<char*>(state.data_ptr());
             auto numel = state.size(0);
             return c10::make_intrusive<SentencePiece>(std::string(data, numel));
@@ -139,7 +141,9 @@ TORCH_LIBRARY_FRAGMENT(torchtext, m) {
            c10::Dict<int64_t, std::string>,
            bool>())
       .def("encode", &GPT2BPEEncoder::Encode)
+      .def("decode", &GPT2BPEEncoder::Decode)
       .def("tokenize", &GPT2BPEEncoder::Tokenize)
+      .def("add_special_tokens", &GPT2BPEEncoder::AddSpecialTokens)
       .def_pickle(
           // __getstate__
           [](const c10::intrusive_ptr<GPT2BPEEncoder>& self)
@@ -174,7 +178,11 @@ TORCH_LIBRARY_FRAGMENT(torchtext, m) {
           });
 
   m.class_<BERTEncoder>("BERTEncoder")
-      .def(torch::init<const std::string, bool, c10::optional<bool>>())
+      .def(torch::init<
+           const std::string,
+           bool,
+           c10::optional<bool>,
+           std::vector<std::string>>())
       .def("encode", &BERTEncoder::Encode)
       .def("tokenize", &BERTEncoder::Tokenize)
       .def(
@@ -204,6 +212,9 @@ TORCH_LIBRARY_FRAGMENT(torchtext, m) {
   m.def("torchtext::load_sp_model", &load_sp_model);
   m.def("torchtext::load_sp_model_string", &load_sp_model_string);
   m.def("torchtext::gpt2_bpe_pre_tokenizer", &gpt2_bpe_pre_tokenizer);
+  m.def(
+      "torchtext::set_utf8_decoding_ignore",
+      &torch::jit::setUTF8DecodingIgnore);
 }
 
 } // namespace torchtext

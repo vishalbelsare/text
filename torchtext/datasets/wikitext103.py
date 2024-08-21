@@ -8,10 +8,6 @@ from torchtext.data.datasets_utils import (
     _create_dataset_directory,
 )
 
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, IterableWrapper
-    from torchtext._download_hooks import HttpReader
-
 URL = "https://s3.amazonaws.com/research.metamind.io/wikitext/wikitext-103-v1.zip"
 
 MD5 = "9ddaacaf6af0710eda8c456decff7832"
@@ -73,6 +69,7 @@ def WikiText103(root: str, split: Union[Tuple[str], str]):
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     url_dp = IterableWrapper([URL])
     # cache data on-disk

@@ -8,10 +8,6 @@ from torchtext.data.datasets_utils import (
     _create_dataset_directory,
 )
 
-if is_module_available("torchdata"):
-    from torchdata.datapipes.iter import FileOpener, IterableWrapper
-    from torchtext._download_hooks import HttpReader
-
 URL = "https://bitbucket.org/sivareddyg/public/downloads/en-ud-v2.zip"
 
 MD5 = "bdcac7c52d934656bae1699541424545"
@@ -68,6 +64,7 @@ def UDPOS(root: str, split: Union[Tuple[str], str]):
         raise ModuleNotFoundError(
             "Package `torchdata` not found. Please install following instructions at https://github.com/pytorch/data"
         )
+    from torchdata.datapipes.iter import FileOpener, GDriveReader, HttpReader, IterableWrapper  # noqa
 
     url_dp = IterableWrapper([URL])
     cache_compressed_dp = url_dp.on_disk_cache(

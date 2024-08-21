@@ -228,11 +228,11 @@ def ngrams_iterator(token_list, ngrams):
             yield " ".join(x)
 
 
-class RandomShuffler(object):
+class RandomShuffler:
     """Use random functions while keeping track of the random state to make it
     reproducible and deterministic."""
 
-    def __init__(self, random_state=None):
+    def __init__(self, random_state=None) -> None:
         self._random_state = random_state
         if self._random_state is None:
             self._random_state = random.getstate()
